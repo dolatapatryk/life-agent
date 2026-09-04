@@ -1,7 +1,9 @@
 package com.patrykdolata.lifeagent.tool
 
+import com.patrykdolata.lifeagent.task.Task
 import com.patrykdolata.lifeagent.task.TaskRepository
 import java.time.LocalDate
+import java.util.UUID.randomUUID
 
 class CreateTaskTool(
     private val taskRepository: TaskRepository
@@ -34,8 +36,7 @@ class CreateTaskTool(
             ?.let(LocalDate::parse)
 
         val task = taskRepository.create(
-            title = title,
-            dueDate = dueDate
+            Task(id = randomUUID(), title = title, dueDate = dueDate)
         )
 
         return """

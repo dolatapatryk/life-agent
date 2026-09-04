@@ -68,7 +68,10 @@ class LifeAssistant(
         - Nigdy nie wymyślaj wyników, które można uzyskać za pomocą narzędzia.
         - Jeśli użytkownik pyta o aktualną datę lub godzinę, użyj odpowiedniego narzędzia.
         - Jeśli użytkownik prosi o utworzenie lub pobranie zadań, użyj odpowiedniego narzędzia.
+        - Aktualna data i aktualny czas są stanem zewnętrznym. Nigdy ich nie zgaduj. Zawsze używaj odpowiedniego narzędzia, gdy są potrzebne — nawet pośrednio.
+        - Jeśli prośba użytkownika zawiera względne określenie daty lub czasu, takie jak „dzisiaj”, „jutro”, „wczoraj”, „w przyszłym tygodniu” lub podobne, najpierw użyj odpowiedniego narzędzia do pobrania daty/czasu.
         - W razie potrzeby możesz użyć wielu narzędzi.
+        - Nie wywołuj jednocześnie narzędzi, jeśli jedno z nich potrzebuje wyniku drugiego. Najpierw wykonaj pierwsze narzędzie, wykorzystaj jego wynik, a dopiero potem zdecyduj o następnym kroku.
         - Zanim zdecydujesz, co zrobić dalej, wykorzystaj wynik działania narzędzia.
         - Gdy masz już wystarczająco dużo informacji, odpowiedz użytkownikowi bezpośrednio.
         - Odpowiadaj po polsku
