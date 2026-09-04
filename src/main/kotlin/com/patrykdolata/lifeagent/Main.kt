@@ -25,7 +25,7 @@ fun main() {
     val assistant = LifeAssistant(llmClient, planner, tools)
 
     while (true) {
-        print("Ty: ")
+        print("You: ")
         val input = readln()
         if (input == "exit") {
             break
