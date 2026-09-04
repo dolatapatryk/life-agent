@@ -2,12 +2,12 @@ package com.patrykdolata.lifeagent
 
 import com.patrykdolata.lifeagent.llm.LlmClient
 import com.patrykdolata.lifeagent.llm.LlmResponse
-import com.patrykdolata.lifeagent.llm.Message
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantToolCallMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
+import com.patrykdolata.lifeagent.llm.ToolCallValidator
 import com.patrykdolata.lifeagent.tool.Tool
 import org.slf4j.LoggerFactory
 
@@ -40,14 +40,50 @@ class LifeAssistant(
                     response.calls.forEach { toolCall ->
                         val tool = tools.find {
                             it.definition.name == toolCall.toolName
-                        } ?: error("Unknown tool: ${toolCall.toolName}")
+                        }
 
-                        val toolResult = tool.execute(toolCall.arguments)
-                        logger.info("Tool: {}, result: {}", toolCall.toolName, toolResult)
+                        if (tool == null) {
+                            messages += toolMessage(
+                                toolName = toolCall.toolName,
+                                content = "ERROR: Unknown tool '${toolCall.toolName}'"
+                            )
+
+                            return@forEach
+                        }
+
+                        if (toolCall.parsingError != null) {
+                            messages += toolMessage(
+                                toolName = toolCall.toolName,
+                                content = "ERROR: ${toolCall.parsingError}"
+                            )
+
+                            return@forEach
+                        }
+
+                        val validationError = ToolCallValidator.validate(
+                            toolCall = toolCall,
+                            definition = tool.definition
+                        )
+
+                        if (validationError != null) {
+                            messages += toolMessage(
+                                toolName = toolCall.toolName,
+                                content = "ERROR: $validationError"
+                            )
+
+                            return@forEach
+                        }
+
+                        val result = try {
+                            tool.execute(toolCall.arguments)
+                        } catch (e: Exception) {
+                            "ERROR: Tool execution failed: ${e.message}"
+                        }
+                        logger.info("Tool: {}, result: {}", toolCall.toolName, result)
 
                         messages += toolMessage(
                             toolName = toolCall.toolName,
-                            content = toolResult
+                            content = result
                         )
                     }
                 }

@@ -28,6 +28,7 @@ import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.add
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonPrimitive
@@ -82,12 +83,7 @@ class LocalLlmClient(
         val toolCalls = response.message.toolCalls.orEmpty()
         if (toolCalls.isNotEmpty()) {
             LlmResponse.ToolCalls(
-                calls = toolCalls.map { toolCall ->
-                    ToolCall(
-                        toolName = toolCall.function.name,
-                        arguments = toolCall.function.arguments.toMap()
-                    )
-                }
+                calls = toolCalls.map { it.toToolCall() }
             )
         } else {
             LlmResponse.Text(
@@ -170,3 +166,24 @@ private fun Map<String, String>.toJsonObject(): JsonObject =
             put(key, value)
         }
     }
+
+private fun OllamaToolCall.toToolCall(): ToolCall {
+    val arguments = mutableMapOf<String, String>()
+
+    function.arguments.forEach { (name, value) ->
+        if (value !is JsonPrimitive) {
+            return ToolCall(
+                toolName = function.name,
+                arguments = emptyMap(),
+                parsingError = "Argument '$name' should be a primitive value, but got: $value"
+            )
+        }
+
+        arguments[name] = value.content
+    }
+
+    return ToolCall(
+        toolName = function.name,
+        arguments = arguments
+    )
+}

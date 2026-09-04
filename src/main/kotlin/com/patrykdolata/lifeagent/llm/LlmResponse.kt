@@ -11,5 +11,6 @@ sealed interface LlmResponse {
 
 data class ToolCall(
     val toolName: String,
-    val arguments: Map<String, String>  = emptyMap()
+    val arguments: Map<String, String>  = emptyMap(),
+    val parsingError: String? = null
 )
