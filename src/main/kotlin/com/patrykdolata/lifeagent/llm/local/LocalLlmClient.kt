@@ -5,6 +5,7 @@ import com.patrykdolata.lifeagent.llm.LlmResponse
 import com.patrykdolata.lifeagent.llm.Message
 import com.patrykdolata.lifeagent.llm.Role
 import com.patrykdolata.lifeagent.llm.Role.ASSISTANT
+import com.patrykdolata.lifeagent.llm.Role.SYSTEM
 import com.patrykdolata.lifeagent.llm.Role.TOOL
 import com.patrykdolata.lifeagent.llm.Role.USER
 import com.patrykdolata.lifeagent.llm.ToolCall
@@ -98,6 +99,7 @@ class LocalLlmClient(
 
 private fun Role.toOllamaRole(): String =
     when (this) {
+        SYSTEM -> "system"
         USER -> "user"
         ASSISTANT -> "assistant"
         TOOL -> "tool"

@@ -1,6 +1,7 @@
 package com.patrykdolata.lifeagent.llm
 
 import com.patrykdolata.lifeagent.llm.Role.ASSISTANT
+import com.patrykdolata.lifeagent.llm.Role.SYSTEM
 import com.patrykdolata.lifeagent.llm.Role.TOOL
 import com.patrykdolata.lifeagent.llm.Role.USER
 
@@ -12,6 +13,8 @@ data class Message(
 ) {
 
     companion object {
+
+        fun systemMessage(content: String) = Message(role = SYSTEM, content = content)
 
         fun userMessage(content: String): Message = Message(role = USER, content = content)
 
@@ -30,6 +33,7 @@ data class Message(
 }
 
 enum class Role {
+    SYSTEM,
     USER,
     ASSISTANT,
     TOOL

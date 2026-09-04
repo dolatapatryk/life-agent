@@ -5,6 +5,7 @@ import com.patrykdolata.lifeagent.llm.LlmResponse
 import com.patrykdolata.lifeagent.llm.Message
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantToolCallMessage
+import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.tool.Tool
@@ -18,7 +19,9 @@ class LifeAssistant(
 
     private val logger = LoggerFactory.getLogger(LifeAssistant::class.java)
 
-    private val messages = mutableListOf<Message>()
+    private val messages = mutableListOf(
+        systemMessage(SYSTEM_PROMPT)
+    )
 
     fun respond(message: String): String {
         messages += userMessage(message)
@@ -52,5 +55,23 @@ class LifeAssistant(
         }
 
         error("Agent exceeded maximum number of steps: $maxSteps")
+    }
+
+    companion object {
+        private const val SYSTEM_PROMPT = """
+        Jesteś osobistym asystentem użytkownika.
+
+        Używaj dostępnych narzędzi, gdy są potrzebne do odpowiedzi na prośbę użytkownika.
+
+        Zasady:
+
+        - Nigdy nie wymyślaj wyników, które można uzyskać za pomocą narzędzia.
+        - Jeśli użytkownik pyta o aktualną datę lub godzinę, użyj odpowiedniego narzędzia.
+        - Jeśli użytkownik prosi o utworzenie lub pobranie zadań, użyj odpowiedniego narzędzia.
+        - W razie potrzeby możesz użyć wielu narzędzi.
+        - Zanim zdecydujesz, co zrobić dalej, wykorzystaj wynik działania narzędzia.
+        - Gdy masz już wystarczająco dużo informacji, odpowiedz użytkownikowi bezpośrednio.
+        - Odpowiadaj po polsku
+    """
     }
 }
