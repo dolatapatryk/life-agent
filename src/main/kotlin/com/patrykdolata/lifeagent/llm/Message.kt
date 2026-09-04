@@ -7,6 +7,7 @@ import com.patrykdolata.lifeagent.llm.Role.USER
 data class Message(
     val role: Role,
     val content: String,
+    val toolCalls: List<ToolCall> = emptyList(),
     val toolName: String? = null
 ) {
 
@@ -15,6 +16,13 @@ data class Message(
         fun userMessage(content: String): Message = Message(role = USER, content = content)
 
         fun assistantMessage(content: String): Message = Message(role = ASSISTANT, content = content)
+
+        fun assistantToolCallMessage(toolCalls: List<ToolCall>) =
+            Message(
+                role = ASSISTANT,
+                content = "",
+                toolCalls = toolCalls
+            )
 
         fun toolMessage(toolName: String, content: String): Message =
             Message(role = TOOL, content = content, toolName = toolName)

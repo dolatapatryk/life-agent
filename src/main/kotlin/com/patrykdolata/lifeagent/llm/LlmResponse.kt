@@ -4,8 +4,12 @@ sealed interface LlmResponse {
 
     data class Text(val content: String) : LlmResponse
 
-    data class ToolCall(
-        val toolName: String,
-        val arguments: Map<String, String> = emptyMap()
+    data class ToolCalls(
+        val calls: List<ToolCall>
     ) : LlmResponse
 }
+
+data class ToolCall(
+    val toolName: String,
+    val arguments: Map<String, String>  = emptyMap()
+)

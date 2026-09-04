@@ -7,6 +7,7 @@ import com.patrykdolata.lifeagent.llm.Role
 import com.patrykdolata.lifeagent.llm.Role.ASSISTANT
 import com.patrykdolata.lifeagent.llm.Role.TOOL
 import com.patrykdolata.lifeagent.llm.Role.USER
+import com.patrykdolata.lifeagent.llm.ToolCall
 import com.patrykdolata.lifeagent.tool.ToolDefinition
 import com.patrykdolata.lifeagent.tool.ToolParameter
 import com.patrykdolata.lifeagent.tool.ToolParameterType
@@ -62,13 +63,7 @@ class LocalLlmClient(
     ): LlmResponse = runBlocking {
         val request = OllamaChatRequest(
             model = model,
-            messages = messages.map { message ->
-                OllamaMessage(
-                    role = message.role.toOllamaRole(),
-                    content = message.content,
-                    toolName = message.toolName
-                )
-            },
+            messages = messages.map { it.toOllamaMessage() },
             tools = tools.map { it.toOllamaTool() },
             stream = false
         )
@@ -83,11 +78,15 @@ class LocalLlmClient(
         val duration = System.currentTimeMillis() - start
         logger.info("LLM response: {}, took: {}ms", response, duration)
 
-        val toolCall = response.message.toolCalls?.firstOrNull()
-        if (toolCall != null) {
-            LlmResponse.ToolCall(
-                toolName = toolCall.function.name,
-                arguments = toolCall.function.arguments.toMap()
+        val toolCalls = response.message.toolCalls.orEmpty()
+        if (toolCalls.isNotEmpty()) {
+            LlmResponse.ToolCalls(
+                calls = toolCalls.map { toolCall ->
+                    ToolCall(
+                        toolName = toolCall.function.name,
+                        arguments = toolCall.function.arguments.toMap()
+                    )
+                }
             )
         } else {
             LlmResponse.Text(
@@ -95,14 +94,14 @@ class LocalLlmClient(
             )
         }
     }
-
-    private fun Role.toOllamaRole(): String =
-        when (this) {
-            USER -> "user"
-            ASSISTANT -> "assistant"
-            TOOL -> "tool"
-        }
 }
+
+private fun Role.toOllamaRole(): String =
+    when (this) {
+        USER -> "user"
+        ASSISTANT -> "assistant"
+        TOOL -> "tool"
+    }
 
 private fun ToolDefinition.toOllamaTool(): OllamaTool =
     OllamaTool(
@@ -144,4 +143,28 @@ private fun ToolParameterType.toJsonSchemaType(): String =
         STRING -> "string"
         INTEGER -> "integer"
         BOOLEAN -> "boolean"
+    }
+
+private fun Message.toOllamaMessage(): OllamaMessage =
+    OllamaMessage(
+        role = role.toOllamaRole(),
+        content = content,
+        toolCalls = toolCalls
+            .takeIf { it.isNotEmpty() }
+            ?.map { toolCall ->
+                OllamaToolCall(
+                    function = OllamaToolCallFunction(
+                        name = toolCall.toolName,
+                        arguments = toolCall.arguments.toJsonObject()
+                    )
+                )
+            },
+        toolName = toolName
+    )
+
+private fun Map<String, String>.toJsonObject(): JsonObject =
+    buildJsonObject {
+        this@toJsonObject.forEach { (key, value) ->
+            put(key, value)
+        }
     }
