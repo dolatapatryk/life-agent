@@ -33,7 +33,7 @@ class LifeAssistant(
                         it.definition.name == response.toolName
                     } ?: error("Unknown tool: ${response.toolName}")
                     val toolResult = tool.execute(response.arguments)
-                    messages += toolMessage(toolResult)
+                    messages += toolMessage(toolName = tool.definition.name, content = toolResult)
                 }
             }
         }

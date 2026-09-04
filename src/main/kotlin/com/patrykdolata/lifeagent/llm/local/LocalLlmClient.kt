@@ -8,6 +8,11 @@ import com.patrykdolata.lifeagent.llm.Role.ASSISTANT
 import com.patrykdolata.lifeagent.llm.Role.TOOL
 import com.patrykdolata.lifeagent.llm.Role.USER
 import com.patrykdolata.lifeagent.tool.ToolDefinition
+import com.patrykdolata.lifeagent.tool.ToolParameter
+import com.patrykdolata.lifeagent.tool.ToolParameterType
+import com.patrykdolata.lifeagent.tool.ToolParameterType.BOOLEAN
+import com.patrykdolata.lifeagent.tool.ToolParameterType.INTEGER
+import com.patrykdolata.lifeagent.tool.ToolParameterType.STRING
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.engine.cio.CIO
@@ -20,10 +25,20 @@ import io.ktor.http.contentType
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.jsonPrimitive
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
+import kotlinx.serialization.json.putJsonObject
+import org.slf4j.LoggerFactory
 
 class LocalLlmClient(
     private val model: String = "qwen3:1.7b"
 ) : LlmClient {
+
+    private val logger = LoggerFactory.getLogger(LocalLlmClient::class.java)
 
     private val httpClient = HttpClient(CIO) {
         install(ContentNegotiation) {
@@ -50,9 +65,11 @@ class LocalLlmClient(
             messages = messages.map { message ->
                 OllamaMessage(
                     role = message.role.toOllamaRole(),
-                    content = message.content
+                    content = message.content,
+                    toolName = message.toolName
                 )
             },
+            tools = tools.map { it.toOllamaTool() },
             stream = false
         )
 
@@ -64,11 +81,19 @@ class LocalLlmClient(
             setBody(request)
         }.body<OllamaChatResponse>()
         val duration = System.currentTimeMillis() - start
-        println("LLM request took ${duration}ms")
+        logger.info("LLM response: {}, took: {}ms", response, duration)
 
-        LlmResponse.Text(
-            content = response.message.content
-        )
+        val toolCall = response.message.toolCalls?.firstOrNull()
+        if (toolCall != null) {
+            LlmResponse.ToolCall(
+                toolName = toolCall.function.name,
+                arguments = toolCall.function.arguments.toMap()
+            )
+        } else {
+            LlmResponse.Text(
+                content = response.message.content
+            )
+        }
     }
 
     private fun Role.toOllamaRole(): String =
@@ -78,3 +103,45 @@ class LocalLlmClient(
             TOOL -> "tool"
         }
 }
+
+private fun ToolDefinition.toOllamaTool(): OllamaTool =
+    OllamaTool(
+        function = OllamaFunction(
+            name = name,
+            description = description,
+            parameters = parameters.toOllamaParameters()
+        )
+    )
+
+private fun JsonObject.toMap(): Map<String, String> {
+    return mapValues { (_, value) -> value.jsonPrimitive.content }
+}
+
+private fun List<ToolParameter>.toOllamaParameters(): JsonObject {
+    return buildJsonObject {
+        put("type", "object")
+
+        putJsonObject("properties") {
+            forEach { parameter ->
+                putJsonObject(parameter.name) {
+                    put("type", parameter.type.toJsonSchemaType())
+                    put("description", parameter.description)
+                }
+            }
+        }
+
+        putJsonArray("required") {
+            filter { it.required }
+                .forEach { parameter ->
+                    add(parameter.name)
+                }
+        }
+    }
+}
+
+private fun ToolParameterType.toJsonSchemaType(): String =
+    when (this) {
+        STRING -> "string"
+        INTEGER -> "integer"
+        BOOLEAN -> "boolean"
+    }
