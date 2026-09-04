@@ -1,5 +1,6 @@
 package com.patrykdolata.lifeagent.tool
 
+import com.patrykdolata.lifeagent.tool.ToolResult.Success
 import java.time.LocalDate
 
 class GetCurrentDateTool : Tool {
@@ -10,7 +11,7 @@ class GetCurrentDateTool : Tool {
         parameters = emptyList()
     )
 
-    override fun execute(arguments: Map<String, String>): String {
-        return LocalDate.now().toString()
+    override fun execute(arguments: Map<String, String>): ToolResult {
+        return Success(LocalDate.now().toString())
     }
 }

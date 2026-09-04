@@ -9,6 +9,9 @@ import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.llm.ToolCallValidator
 import com.patrykdolata.lifeagent.tool.Tool
+import com.patrykdolata.lifeagent.tool.ToolResult
+import com.patrykdolata.lifeagent.tool.ToolResult.Error
+import com.patrykdolata.lifeagent.tool.ToolResult.Success
 import org.slf4j.LoggerFactory
 
 class LifeAssistant(
@@ -77,13 +80,13 @@ class LifeAssistant(
                         val result = try {
                             tool.execute(toolCall.arguments)
                         } catch (e: Exception) {
-                            "ERROR: Tool execution failed: ${e.message}"
+                            Error("Tool execution failed: ${e.message}")
                         }
                         logger.info("Tool: {}, result: {}", toolCall.toolName, result)
 
                         messages += toolMessage(
                             toolName = toolCall.toolName,
-                            content = result
+                            content = result.toMessageContent()
                         )
                     }
                 }
@@ -114,3 +117,9 @@ class LifeAssistant(
     """
     }
 }
+
+private fun ToolResult.toMessageContent(): String =
+    when (this) {
+        is Success -> content
+        is Error -> "ERROR: $message"
+    }

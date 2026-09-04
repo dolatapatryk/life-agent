@@ -2,6 +2,8 @@ package com.patrykdolata.lifeagent.tool
 
 import com.patrykdolata.lifeagent.task.Task
 import com.patrykdolata.lifeagent.task.TaskRepository
+import com.patrykdolata.lifeagent.tool.ToolResult.Error
+import com.patrykdolata.lifeagent.tool.ToolResult.Success
 import java.time.LocalDate
 import java.util.UUID.randomUUID
 
@@ -28,22 +30,30 @@ class CreateTaskTool(
         )
     )
 
-    override fun execute(arguments: Map<String, String>): String {
+    override fun execute(arguments: Map<String, String>): ToolResult {
         val title = arguments["title"]
-            ?: error("Missing argument: title")
+            ?: return Error("Missing argument 'title'")
 
         val dueDate = arguments["dueDate"]
-            ?.let(LocalDate::parse)
+            ?: return Error("Missing argument 'dueDate'")
+
+        val parsedDate = runCatching {
+            LocalDate.parse(dueDate)
+        }.getOrElse {
+            return Error("Invalid dueDate '$dueDate'. Expected yyyy-MM-dd.")
+        }
 
         val task = taskRepository.create(
-            Task(id = randomUUID(), title = title, dueDate = dueDate)
+            Task(id = randomUUID(), title = title, dueDate = parsedDate)
         )
 
-        return """
+        return Success(
+            """
             Created task:
             id=${task.id}
             title=${task.title}
             dueDate=${task.dueDate}
         """.trimIndent()
+        )
     }
 }

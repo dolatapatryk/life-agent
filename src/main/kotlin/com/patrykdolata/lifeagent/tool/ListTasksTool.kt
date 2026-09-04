@@ -1,6 +1,7 @@
 package com.patrykdolata.lifeagent.tool
 
 import com.patrykdolata.lifeagent.task.TaskRepository
+import com.patrykdolata.lifeagent.tool.ToolResult.Success
 
 class ListTasksTool(
     private val taskRepository: TaskRepository
@@ -12,19 +13,21 @@ class ListTasksTool(
         parameters = emptyList()
     )
 
-    override fun execute(arguments: Map<String, String>): String {
+    override fun execute(arguments: Map<String, String>): ToolResult {
         val tasks = taskRepository.findAll()
 
         if (tasks.isEmpty()) {
-            return "No tasks found."
+            return Success("No tasks found.")
         }
 
-        return tasks.joinToString("\n") { task ->
-            """
+        return Success(
+            tasks.joinToString("\n") { task ->
+                """
             id=${task.id},
             title=${task.title},
             dueDate=${task.dueDate}
             """.trimIndent()
-        }
+            }
+        )
     }
 }
