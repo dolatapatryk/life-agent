@@ -8,6 +8,7 @@ import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.llm.ToolCallValidator
+import com.patrykdolata.lifeagent.plan.Planner
 import com.patrykdolata.lifeagent.tool.Tool
 import com.patrykdolata.lifeagent.tool.ToolResult
 import com.patrykdolata.lifeagent.tool.ToolResult.Error
@@ -16,6 +17,7 @@ import org.slf4j.LoggerFactory
 
 class LifeAssistant(
     private val llmClient: LlmClient,
+    private val planner: Planner,
     private val tools: List<Tool>,
     private val maxSteps: Int = 10
 ) {
@@ -27,7 +29,26 @@ class LifeAssistant(
     )
 
     fun respond(message: String): String {
-        messages += userMessage(message)
+        val plan = planner.createPlan(
+            request = message,
+            tools = tools.map { it.definition }
+        )
+
+        logger.info("Plan:\n{}", plan)
+
+        messages += userMessage(
+            """
+        Prośba użytkownika:
+        $message
+
+        Plan wykonania:
+        $plan
+
+        Wykonaj ten plan krok po kroku.
+        Korzystaj z narzędzi zgodnie z potrzebą.
+        """.trimIndent()
+        )
+//        messages += userMessage(message)
 
         repeat(maxSteps) {
             val response = llmClient.generate(messages, tools.map { it.definition })

@@ -2,6 +2,7 @@ package com.patrykdolata.lifeagent
 
 import com.patrykdolata.lifeagent.llm.LlmClient
 import com.patrykdolata.lifeagent.llm.local.LocalLlmClient
+import com.patrykdolata.lifeagent.plan.LlmPlanner
 import com.patrykdolata.lifeagent.task.FileTaskRepository
 import com.patrykdolata.lifeagent.task.TaskRepository
 import com.patrykdolata.lifeagent.tool.CreateTaskTool
@@ -20,7 +21,8 @@ fun main() {
         CreateTaskTool(taskRepository),
         ListTasksTool(taskRepository)
     )
-    val assistant = LifeAssistant(llmClient, tools)
+    val planner = LlmPlanner(llmClient)
+    val assistant = LifeAssistant(llmClient, planner, tools)
 
     while (true) {
         print("Ty: ")
