@@ -42,12 +42,16 @@ class LifeAssistant(
 
         logger.info("Plan:\n{}", plan)
 
-        return planExecutor.execute(
+        val executionResult = planExecutor.execute(
             request = message,
             plan = plan,
             canExecuteInParallel = ::canExecuteInParallel,
             executeStep = ::executeStep
-        ).result
+        )
+        val terminalStepIds = plan.terminalStepIds()
+        return executionResult.stepResults
+            .filter { it.stepId in terminalStepIds }
+            .joinToString("\n") { it.result }
     }
 
     private fun executeStep(originalRequest: String, step: PlanStep, dependencyResults: List<StepResult>): StepResult {
@@ -181,7 +185,7 @@ class LifeAssistant(
             "Brak."
         } else {
             dependencyResults.joinToString("\n\n") { result ->
-                    """
+                """
                     Krok ${result.stepId}
                     Narzędzie: ${result.toolName ?: "brak"}
                     Wynik:
@@ -248,8 +252,13 @@ private fun ToolResult.toMessageContent(): String =
         is Error -> "ERROR: $message"
     }
 
-private fun Plan.toPrompt(): String {
-    return steps.joinToString("\n") { step ->
-        "${step.id}. ${step.description}"
-    }
+private fun Plan.terminalStepIds(): Set<String> {
+    val dependencyIds = steps
+        .flatMap { it.dependsOn }
+        .toSet()
+
+    return steps
+        .map { it.id }
+        .filterNot { it in dependencyIds }
+        .toSet()
 }

@@ -16,7 +16,7 @@ class PlanExecutor {
             step: PlanStep,
             previousResults: List<StepResult>
         ) -> StepResult
-    ): StepResult {
+    ): PlanExecutionResult {
         validatePlan(plan)
         val pendingSteps = plan.steps.toMutableList()
         val results = mutableListOf<StepResult>()
@@ -35,7 +35,7 @@ class PlanExecutor {
 
             val parallelSteps = readySteps.filter(canExecuteInParallel)
             val sequentialSteps = readySteps.filterNot(canExecuteInParallel)
-            
+
             val parallelResults = coroutineScope {
                 parallelSteps.map { step ->
                     val dependencyResults = results.filter { result -> result.stepId in step.dependsOn }
@@ -60,7 +60,7 @@ class PlanExecutor {
             }
         }
 
-        return results.lastOrNull() ?: error("No steps in plan")
+        return PlanExecutionResult(results)
     }
 
     private fun validatePlan(plan: Plan) {
