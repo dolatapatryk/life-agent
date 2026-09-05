@@ -19,14 +19,25 @@ class PlanExecutor {
             val completedStepIds = results
                 .map { it.stepId }
                 .toSet()
-            val readyStep = pendingSteps.firstOrNull { step ->
+            val readySteps = pendingSteps.filter { step ->
                 step.dependsOn.all { it in completedStepIds }
-            } ?: error("Cannot execute plan: unresolved dependencies")
+            }
 
-            val dependencyResults = results.filter { it.stepId in readyStep.dependsOn }
-            val result = executeStep(request, readyStep, dependencyResults)
-            results += result
-            pendingSteps.remove(readyStep)
+            check(readySteps.isNotEmpty()) {
+                "Cannot execute plan: unresolved dependencies"
+            }
+
+            for (step in readySteps) {
+                val dependencyResults = results.filter { result -> result.stepId in step.dependsOn }
+                val result = executeStep(
+                    request,
+                    step,
+                    dependencyResults
+                )
+
+                results += result
+                pendingSteps.remove(step)
+            }
         }
 
         return results.lastOrNull() ?: error("No steps in plan")

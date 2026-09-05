@@ -49,7 +49,7 @@ class LifeAssistant(
         ).result
     }
 
-    private fun executeStep(originalRequest: String, step: PlanStep, previousResults: List<StepResult>): StepResult {
+    private fun executeStep(originalRequest: String, step: PlanStep, dependencyResults: List<StepResult>): StepResult {
         logger.info("Executing plan step {}: {}", step.id, step.description)
         val stepTool = step.toolName?.let { toolName ->
             tools.find { it.definition.name == toolName }
@@ -58,7 +58,7 @@ class LifeAssistant(
         if (stepTool != null && stepTool.definition.parameters.isEmpty()) {
             return executeTool(step, stepTool)
         }
-        val request = buildStepRequest(originalRequest, step, previousResults)
+        val request = buildStepRequest(originalRequest, step, dependencyResults)
         val stepMessages = mutableListOf(
             systemMessage(SYSTEM_PROMPT),
             userMessage(request)
@@ -174,12 +174,12 @@ class LifeAssistant(
     private fun buildStepRequest(
         originalRequest: String,
         step: PlanStep,
-        previousResults: List<StepResult>
+        dependencyResults: List<StepResult>
     ): String {
-        val results = if (previousResults.isEmpty()) {
+        val results = if (dependencyResults.isEmpty()) {
             "Brak."
         } else {
-            previousResults.joinToString("\n\n") { result ->
+            dependencyResults.joinToString("\n\n") { result ->
                     """
                     Krok ${result.stepId}
                     Narzędzie: ${result.toolName ?: "brak"}
@@ -198,7 +198,7 @@ class LifeAssistant(
         Aktualny krok:
         ${step.id}. ${step.description}
 
-        Wyniki wcześniej wykonanych kroków:
+        Wyniki kroków, od których zależy aktualny krok:
         $results
 
         Wykonaj WYŁĄCZNIE aktualny krok.
