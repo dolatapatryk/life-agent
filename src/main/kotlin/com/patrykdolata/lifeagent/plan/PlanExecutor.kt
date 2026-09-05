@@ -1,10 +1,16 @@
 package com.patrykdolata.lifeagent.plan
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+
 class PlanExecutor {
 
-    fun execute(
+    suspend fun execute(
         request: String,
         plan: Plan,
+        canExecuteInParallel: (PlanStep) -> Boolean,
         executeStep: (
             originalRequest: String,
             step: PlanStep,
@@ -27,7 +33,21 @@ class PlanExecutor {
                 "Cannot execute plan: unresolved dependencies"
             }
 
-            for (step in readySteps) {
+            val parallelSteps = readySteps.filter(canExecuteInParallel)
+            val sequentialSteps = readySteps.filterNot(canExecuteInParallel)
+            
+            val parallelResults = coroutineScope {
+                parallelSteps.map { step ->
+                    val dependencyResults = results.filter { result -> result.stepId in step.dependsOn }
+                    async(Dispatchers.IO) {
+                        executeStep(request, step, dependencyResults)
+                    }
+                }.awaitAll()
+            }
+            results += parallelResults
+            pendingSteps.removeAll(parallelSteps)
+
+            for (step in sequentialSteps) {
                 val dependencyResults = results.filter { result -> result.stepId in step.dependsOn }
                 val result = executeStep(
                     request,

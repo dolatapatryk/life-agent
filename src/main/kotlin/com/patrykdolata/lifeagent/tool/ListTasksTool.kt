@@ -13,6 +13,8 @@ class ListTasksTool(
         parameters = emptyList()
     )
 
+    override val parallelSafe: Boolean = true
+
     override fun execute(arguments: Map<String, String>): ToolResult {
         val tasks = taskRepository.findAll()
 

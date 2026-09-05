@@ -11,6 +11,8 @@ class GetCurrentDateTool : Tool {
         parameters = emptyList()
     )
 
+    override val parallelSafe: Boolean = true
+
     override fun execute(arguments: Map<String, String>): ToolResult {
         return Success(LocalDate.now().toString())
     }

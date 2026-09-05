@@ -34,7 +34,7 @@ class LifeAssistant(
         systemMessage(SYSTEM_PROMPT)
     )
 
-    fun respond(message: String): String {
+    suspend fun respond(message: String): String {
         val plan = planner.createPlan(
             request = message,
             tools = tools.map { it.definition }
@@ -45,6 +45,7 @@ class LifeAssistant(
         return planExecutor.execute(
             request = message,
             plan = plan,
+            canExecuteInParallel = ::canExecuteInParallel,
             executeStep = ::executeStep
         ).result
     }
@@ -209,6 +210,14 @@ class LifeAssistant(
         Jeśli do wykonania aktualnego kroku potrzebujesz narzędzia, użyj go.
         Po wykonaniu aktualnego kroku zwróć jego wynik.
     """.trimIndent()
+    }
+
+    private fun canExecuteInParallel(step: PlanStep): Boolean {
+        val toolName = step.toolName ?: return false
+        return tools
+            .find { it.definition.name == toolName }
+            ?.parallelSafe
+            ?: false
     }
 
     companion object {

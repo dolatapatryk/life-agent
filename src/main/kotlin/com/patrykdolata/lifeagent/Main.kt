@@ -10,9 +10,10 @@ import com.patrykdolata.lifeagent.tool.CreateTaskTool
 import com.patrykdolata.lifeagent.tool.GetCurrentDateTool
 import com.patrykdolata.lifeagent.tool.GetCurrentTimeTool
 import com.patrykdolata.lifeagent.tool.ListTasksTool
+import kotlinx.coroutines.runBlocking
 import java.io.File
 
-fun main() {
+fun main() = runBlocking {
 
     val llmClient: LlmClient = LocalLlmClient()
     val taskRepository: TaskRepository = FileTaskRepository(File("tasks.json"))
