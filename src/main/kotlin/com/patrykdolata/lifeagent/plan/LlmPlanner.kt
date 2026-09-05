@@ -74,6 +74,12 @@ class LlmPlanner(
               na liście.
             - Krok bez zależności powinien mieć dependsOn = [].
             - dependsOn może wskazywać wyłącznie istniejące kroki planu.
+            - Nie dodawaj zależności tylko dlatego, że krok znajduje się wcześniej na liście.
+            - Jeśli dwa kroki można wykonać niezależnie, oba MUSZĄ mieć niezależne dependsOn.
+            - Dodaj krok A do dependsOn kroku B WYŁĄCZNIE wtedy, gdy:
+                  1. B potrzebuje wyniku A do wyznaczenia swoich argumentów, LUB
+                  2. B musi nastąpić po A ze względu na wymagany efekt uboczny.
+            - Pobranie aktualnej daty i pobranie aktualnego czasu są niezależnymi operacjami, chyba że konkretna prośba użytkownika wymaga wyniku jednej do wykonania drugiej.
             - Nie dodawaj żadnego tekstu przed ani po JSON.
         """.trimIndent()
 

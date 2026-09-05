@@ -49,9 +49,10 @@ class LifeAssistant(
             executeStep = ::executeStep
         )
         val terminalStepIds = plan.terminalStepIds()
-        return executionResult.stepResults
-            .filter { it.stepId in terminalStepIds }
-            .joinToString("\n") { it.result }
+        val terminalResults = executionResult.stepResults.filter {
+            it.stepId in terminalStepIds
+        }
+        return generateFinalResponse(message, terminalResults)
     }
 
     private fun executeStep(originalRequest: String, step: PlanStep, dependencyResults: List<StepResult>): StepResult {
@@ -224,25 +225,73 @@ class LifeAssistant(
             ?: false
     }
 
+    private fun generateFinalResponse(
+        originalRequest: String,
+        results: List<StepResult>
+    ): String {
+        val resultsText = results.joinToString("\n\n") { result ->
+            """
+                Krok ${result.stepId}
+                Tool: ${result.toolName ?: "brak"}
+                Wynik:
+                ${result.result}
+            """.trimIndent()
+        }
+
+        val messages = listOf(
+            systemMessage(FINAL_RESPONSE_PROMPT),
+            userMessage(
+                """
+                     Oryginalna prośba użytkownika:
+                     $originalRequest
+                
+                     Wyniki wykonania:
+                     $resultsText
+                """.trimIndent()
+            )
+        )
+
+        return when (val response = llmClient.generate(messages)) {
+            is Text -> response.content
+            is ToolCalls -> error("Final response generation must not call tools")
+        }
+    }
+
     companion object {
-        private const val SYSTEM_PROMPT = """
-        Jesteś osobistym asystentem użytkownika.
+        private const val SYSTEM_PROMPT =
+            """
+                Jesteś osobistym asystentem użytkownika.
+        
+                Używaj dostępnych narzędzi, gdy są potrzebne do odpowiedzi na prośbę użytkownika.
+        
+                Zasady:
+        
+                - Nigdy nie wymyślaj wyników, które można uzyskać za pomocą narzędzia.
+                - Jeśli użytkownik pyta o aktualną datę lub godzinę, użyj odpowiedniego narzędzia.
+                - Jeśli użytkownik prosi o utworzenie lub pobranie zadań, użyj odpowiedniego narzędzia.
+                - Aktualna data i aktualny czas są stanem zewnętrznym. Nigdy ich nie zgaduj. Zawsze używaj odpowiedniego narzędzia, gdy są potrzebne — nawet pośrednio.
+                - Jeśli prośba użytkownika zawiera względne określenie daty lub czasu, takie jak „dzisiaj”, „jutro”, „wczoraj”, „w przyszłym tygodniu” lub podobne, najpierw użyj odpowiedniego narzędzia do pobrania daty/czasu.
+                - W razie potrzeby możesz użyć wielu narzędzi.
+                - Nie wywołuj jednocześnie narzędzi, jeśli jedno z nich potrzebuje wyniku drugiego. Najpierw wykonaj pierwsze narzędzie, wykorzystaj jego wynik, a dopiero potem zdecyduj o następnym kroku.
+                - Zanim zdecydujesz, co zrobić dalej, wykorzystaj wynik działania narzędzia.
+                - Gdy masz już wystarczająco dużo informacji, odpowiedz użytkownikowi bezpośrednio.
+                - Odpowiadaj po polsku
+            """
 
-        Używaj dostępnych narzędzi, gdy są potrzebne do odpowiedzi na prośbę użytkownika.
+        private const val FINAL_RESPONSE_PROMPT =
+            """
+                Jesteś osobistym asystentem użytkownika.
 
-        Zasady:
-
-        - Nigdy nie wymyślaj wyników, które można uzyskać za pomocą narzędzia.
-        - Jeśli użytkownik pyta o aktualną datę lub godzinę, użyj odpowiedniego narzędzia.
-        - Jeśli użytkownik prosi o utworzenie lub pobranie zadań, użyj odpowiedniego narzędzia.
-        - Aktualna data i aktualny czas są stanem zewnętrznym. Nigdy ich nie zgaduj. Zawsze używaj odpowiedniego narzędzia, gdy są potrzebne — nawet pośrednio.
-        - Jeśli prośba użytkownika zawiera względne określenie daty lub czasu, takie jak „dzisiaj”, „jutro”, „wczoraj”, „w przyszłym tygodniu” lub podobne, najpierw użyj odpowiedniego narzędzia do pobrania daty/czasu.
-        - W razie potrzeby możesz użyć wielu narzędzi.
-        - Nie wywołuj jednocześnie narzędzi, jeśli jedno z nich potrzebuje wyniku drugiego. Najpierw wykonaj pierwsze narzędzie, wykorzystaj jego wynik, a dopiero potem zdecyduj o następnym kroku.
-        - Zanim zdecydujesz, co zrobić dalej, wykorzystaj wynik działania narzędzia.
-        - Gdy masz już wystarczająco dużo informacji, odpowiedz użytkownikowi bezpośrednio.
-        - Odpowiadaj po polsku
-    """
+                Na podstawie oryginalnej prośby użytkownika oraz wyników wykonanych kroków
+                przygotuj krótką, naturalną odpowiedź po polsku.
+                
+                Zasady:
+                - Nie wymyślaj żadnych informacji.
+                - Używaj wyłącznie danych dostarczonych w wynikach kroków.
+                - Nie opisuj wewnętrznego planu, kroków ani narzędzi.
+                - Nie wspominaj o toolach, StepResult ani wykonaniu planu.
+                - Jeśli kilka wyników odpowiada na różne części pytania, połącz je w jedną odpowiedź.
+            """
     }
 }
 

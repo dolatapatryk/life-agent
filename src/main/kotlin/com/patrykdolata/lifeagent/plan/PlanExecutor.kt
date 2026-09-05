@@ -40,7 +40,10 @@ class PlanExecutor {
                 parallelSteps.map { step ->
                     val dependencyResults = results.filter { result -> result.stepId in step.dependsOn }
                     async(Dispatchers.IO) {
-                        executeStep(request, step, dependencyResults)
+                        println("start async step: $step")
+                        val result = executeStep(request, step, dependencyResults)
+                        println("finish async step: $step")
+                        result
                     }
                 }.awaitAll()
             }
