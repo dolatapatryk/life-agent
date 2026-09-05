@@ -25,7 +25,7 @@ enum class PlanStepStatus {
 data class StepResult(
     val stepId: String,
     val toolName: String?,
-//    val status: StepResultStatus,
+    val status: StepResultStatus,
     val result: String
 )
 

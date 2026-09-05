@@ -1,5 +1,7 @@
 package com.patrykdolata.lifeagent.plan
 
+import com.patrykdolata.lifeagent.plan.StepResultStatus.FAILURE
+import com.patrykdolata.lifeagent.plan.StepResultStatus.SUCCESS
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -22,15 +24,36 @@ class PlanExecutor {
         val results = mutableListOf<StepResult>()
 
         while (pendingSteps.isNotEmpty()) {
-            val completedStepIds = results
+            val successfulStepIds = results
+                .filter { it.status == SUCCESS }
                 .map { it.stepId }
                 .toSet()
+
+            val failedStepIds = results
+                .filter { it.status == FAILURE }
+                .map { it.stepId }
+                .toSet()
+            val blockedSteps = pendingSteps.filter { step ->
+                step.dependsOn.any { dependencyId ->
+                    dependencyId in failedStepIds
+                }
+            }
+            blockedSteps.forEach { step ->
+                results += StepResult(
+                    stepId = step.id,
+                    toolName = step.toolName,
+                    status = FAILURE,
+                    result = "Krok nie został wykonany, ponieważ jeden z jego kroków zależnych zakończył się błędem"
+                )
+            }
+            pendingSteps.removeAll(blockedSteps)
+
             val readySteps = pendingSteps.filter { step ->
-                step.dependsOn.all { it in completedStepIds }
+                step.dependsOn.all { it in successfulStepIds }
             }
 
-            check(readySteps.isNotEmpty()) {
-                "Cannot execute plan: unresolved dependencies"
+            if (readySteps.isEmpty() && blockedSteps.isEmpty()) {
+                error("Cannot execute plan: unresolved dependencies")
             }
 
             val parallelSteps = readySteps.filter(canExecuteInParallel)

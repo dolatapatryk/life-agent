@@ -14,6 +14,7 @@ import com.patrykdolata.lifeagent.plan.PlanExecutor
 import com.patrykdolata.lifeagent.plan.PlanStep
 import com.patrykdolata.lifeagent.plan.Planner
 import com.patrykdolata.lifeagent.plan.StepResult
+import com.patrykdolata.lifeagent.plan.StepResultStatus
 import com.patrykdolata.lifeagent.tool.Tool
 import com.patrykdolata.lifeagent.tool.ToolResult
 import com.patrykdolata.lifeagent.tool.ToolResult.Error
@@ -101,6 +102,7 @@ class LifeAssistant(
                     return StepResult(
                         stepId = step.id,
                         toolName = null,
+                        status = StepResultStatus.SUCCESS,
                         result = response.content
                     )
                 }
@@ -173,6 +175,10 @@ class LifeAssistant(
         return StepResult(
             stepId = step.id,
             toolName = tool.definition.name,
+            status = when(result) {
+                is Success -> StepResultStatus.SUCCESS
+                is Error -> StepResultStatus.FAILURE
+            },
             result = result.toMessageContent()
         )
     }
@@ -233,6 +239,7 @@ class LifeAssistant(
             """
                 Krok ${result.stepId}
                 Tool: ${result.toolName ?: "brak"}
+                Status: ${result.status}
                 Wynik:
                 ${result.result}
             """.trimIndent()
