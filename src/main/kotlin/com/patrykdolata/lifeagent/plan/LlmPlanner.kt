@@ -43,7 +43,8 @@ class LlmPlanner(
                 {
                   "id": "1",
                   "description": "opis kroku",
-                  "toolName": "nazwaNarzędzia"
+                  "toolName": "nazwaNarzędzia",
+                  "dependsOn": []
                 }
               ]
             }
@@ -63,6 +64,16 @@ class LlmPlanner(
               najpierw zaplanuj krok pobierający tę wartość.
             - Nigdy nie twórz kroku createTask z datą względną typu "jutro".
               Najpierw pobierz aktualną datę, a dopiero później utwórz zadanie z konkretną datą.
+            - Pole dependsOn zawiera identyfikatory kroków, które muszą zostać
+              zakończone przed wykonaniem danego kroku.
+            - Jeśli krok potrzebuje wyniku wcześniejszego kroku, dodaj identyfikator
+              tego kroku do dependsOn.
+            - Jeśli kolejność działań ma znaczenie ze względu na efekt uboczny,
+              również użyj dependsOn.
+            - Nie dodawaj zależności tylko dlatego, że krok znajduje się wcześniej
+              na liście.
+            - Krok bez zależności powinien mieć dependsOn = [].
+            - dependsOn może wskazywać wyłącznie istniejące kroki planu.
             - Nie dodawaj żadnego tekstu przed ani po JSON.
         """.trimIndent()
 

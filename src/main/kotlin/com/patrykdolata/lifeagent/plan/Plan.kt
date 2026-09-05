@@ -11,6 +11,7 @@ data class PlanStep(
     val id: String,
     val description: String,
     val toolName: String? = null,
+    val dependsOn: List<String> = emptyList(),
     val status: PlanStepStatus = PENDING
 )
 
