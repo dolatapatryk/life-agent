@@ -14,6 +14,7 @@ import com.patrykdolata.lifeagent.plan.Plan
 import com.patrykdolata.lifeagent.plan.PlanExecutor
 import com.patrykdolata.lifeagent.plan.PlanStep
 import com.patrykdolata.lifeagent.plan.Planner
+import com.patrykdolata.lifeagent.plan.StepResult
 import com.patrykdolata.lifeagent.tool.Tool
 import com.patrykdolata.lifeagent.tool.ToolResult
 import com.patrykdolata.lifeagent.tool.ToolResult.Error
@@ -46,10 +47,10 @@ class LifeAssistant(
             request = message,
             plan = plan,
             executeStep = ::executeStep
-        )
+        ).result
     }
 
-    private fun executeStep(originalRequest: String, step: PlanStep, previousResults: List<String>): String {
+    private fun executeStep(originalRequest: String, step: PlanStep, previousResults: List<StepResult>): StepResult {
         val request = buildStepRequest(originalRequest, step, previousResults)
         logger.info("Executing plan step {}: {}", step.id, step.description)
         val stepMessages = mutableListOf(
@@ -60,24 +61,20 @@ class LifeAssistant(
             tools.find { it.definition.name == toolName }
                 ?: error("Unknown tool in plan: $toolName")
         }
-        return runStepAgentLoop(stepMessages, stepTool)
+        return runStepAgentLoop(stepMessages, step, stepTool)
     }
 
-    private fun runStepAgentLoop(messages: MutableList<Message>, stepTool: Tool?): String {
-        var toolExecuted = false
-
+    private fun runStepAgentLoop(messages: MutableList<Message>, step: PlanStep, stepTool: Tool?): StepResult {
         repeat(maxSteps) {
 
-            val availableTools = if (!toolExecuted && stepTool != null) {
-                listOf(stepTool.definition)
-            } else {
-                emptyList()
-            }
+            val availableTools = stepTool
+                ?.let { listOf(it.definition) }
+                ?: emptyList()
 
             val response = llmClient.generate(messages, availableTools)
             when (response) {
                 is Text -> {
-                    if (stepTool != null && !toolExecuted) {
+                    if (stepTool != null) {
                         logger.warn(
                             "Model returned text before required tool '{}' was executed",
                             stepTool.definition.name
@@ -93,8 +90,11 @@ class LifeAssistant(
 
                         return@repeat
                     }
-                    messages += assistantMessage(response.content)
-                    return response.content
+                    return StepResult(
+                        stepId = step.id,
+                        toolName = null,
+                        result = response.content
+                    )
                 }
 
                 is ToolCalls -> {
@@ -103,10 +103,6 @@ class LifeAssistant(
                             "Model attempted to call a tool, " +
                                 "but current plan step does not allow tools"
                         )
-                    }
-
-                    if (toolExecuted) {
-                        error("Tool has already been executed for this plan step")
                     }
 
                     if (response.calls.size != 1) {
@@ -124,9 +120,8 @@ class LifeAssistant(
                         )
                     }
 
-                    messages += assistantToolCallMessage(response.calls)
-
                     if (toolCall.parsingError != null) {
+                        messages += assistantToolCallMessage(response.calls)
                         messages += toolMessage(
                             toolName = toolCall.toolName,
                             content = "ERROR: ${toolCall.parsingError}"
@@ -141,6 +136,7 @@ class LifeAssistant(
                     )
 
                     if (validationError != null) {
+                        messages += assistantToolCallMessage(response.calls)
                         messages += toolMessage(
                             toolName = toolCall.toolName,
                             content = "ERROR: $validationError"
@@ -156,84 +152,11 @@ class LifeAssistant(
                     }
                     logger.info("Tool: {}, result: {}", toolCall.toolName, result)
 
-                    messages += toolMessage(
+                    return StepResult(
+                        stepId = step.id,
                         toolName = toolCall.toolName,
-                        content = result.toMessageContent()
+                        result = result.toMessageContent()
                     )
-
-                    toolExecuted = true
-                }
-            }
-        }
-
-        error("Agent exceeded maximum number of steps: $maxSteps")
-    }
-
-    private fun runAgentLoop(): String {
-        repeat(maxSteps) {
-            val response = llmClient.generate(
-                messages,
-                tools.map { it.definition }
-            )
-
-            when (response) {
-                is Text -> {
-                    messages += assistantMessage(response.content)
-                    return response.content
-                }
-
-                is ToolCalls -> {
-                    messages += assistantToolCallMessage(response.calls)
-
-                    response.calls.forEach { toolCall ->
-                        val tool = tools.find {
-                            it.definition.name == toolCall.toolName
-                        }
-
-                        if (tool == null) {
-                            messages += toolMessage(
-                                toolName = toolCall.toolName,
-                                content = "ERROR: Unknown tool '${toolCall.toolName}'"
-                            )
-
-                            return@forEach
-                        }
-
-                        if (toolCall.parsingError != null) {
-                            messages += toolMessage(
-                                toolName = toolCall.toolName,
-                                content = "ERROR: ${toolCall.parsingError}"
-                            )
-
-                            return@forEach
-                        }
-
-                        val validationError = ToolCallValidator.validate(
-                            toolCall = toolCall,
-                            definition = tool.definition
-                        )
-
-                        if (validationError != null) {
-                            messages += toolMessage(
-                                toolName = toolCall.toolName,
-                                content = "ERROR: $validationError"
-                            )
-
-                            return@forEach
-                        }
-
-                        val result = try {
-                            tool.execute(toolCall.arguments)
-                        } catch (e: Exception) {
-                            Error("Tool execution failed: ${e.message}")
-                        }
-                        logger.info("Tool: {}, result: {}", toolCall.toolName, result)
-
-                        messages += toolMessage(
-                            toolName = toolCall.toolName,
-                            content = result.toMessageContent()
-                        )
-                    }
                 }
             }
         }
@@ -244,12 +167,19 @@ class LifeAssistant(
     private fun buildStepRequest(
         originalRequest: String,
         step: PlanStep,
-        previousResults: List<String>
+        previousResults: List<StepResult>
     ): String {
         val results = if (previousResults.isEmpty()) {
             "Brak."
         } else {
-            previousResults.joinToString("\n")
+            previousResults.joinToString("\n\n") { result ->
+                    """
+                    Krok ${result.stepId}
+                    Narzędzie: ${result.toolName ?: "brak"}
+                    Wynik:
+                    ${result.result}
+                """.trimIndent()
+            }
         }
 
         return """

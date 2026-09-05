@@ -20,3 +20,9 @@ enum class PlanStepStatus {
     COMPLETED,
     FAILED
 }
+
+data class StepResult(
+    val stepId: String,
+    val toolName: String?,
+    val result: String
+)

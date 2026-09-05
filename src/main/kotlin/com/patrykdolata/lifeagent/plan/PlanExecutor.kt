@@ -8,11 +8,10 @@ class PlanExecutor {
         executeStep: (
             originalRequest: String,
             step: PlanStep,
-            previousResults: List<String>
-        ) -> String
-    ): String {
-        val results = mutableListOf<String>()
-        var finalResult: String? = null
+            previousResults: List<StepResult>
+        ) -> StepResult
+    ): StepResult {
+        val results = mutableListOf<StepResult>()
 
         for (step in plan.steps) {
             val result = executeStep(
@@ -21,10 +20,9 @@ class PlanExecutor {
                 results
             )
 
-            results += "Krok ${step.id}: $result"
-            finalResult = result
+            results += result
         }
 
-        return finalResult ?: error("No steps in plan")
+        return results.lastOrNull() ?: error("No steps in plan")
     }
 }
