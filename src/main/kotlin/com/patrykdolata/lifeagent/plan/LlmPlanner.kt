@@ -6,53 +6,67 @@ import com.patrykdolata.lifeagent.llm.LlmResponse.ToolCalls
 import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.tool.ToolDefinition
+import kotlinx.serialization.json.Json
 
 class LlmPlanner(
     private val llmClient: LlmClient
 ) : Planner {
 
+    private val json = Json {
+        ignoreUnknownKeys = true
+    }
+
     override fun createPlan(
         request: String,
         tools: List<ToolDefinition>
-    ): String {
+    ): Plan {
 
-        val plannerPrompt = buildString {
-            appendLine("Jesteś plannerem dla osobistego agenta AI.")
-            appendLine()
-            appendLine("Twoim zadaniem jest przygotowanie planu wykonania prośby użytkownika.")
-            appendLine()
-            appendLine("Dostępne możliwości agenta:")
+        val toolsDescription = tools.joinToString("\n") { tool ->
+            "- ${tool.name}: ${tool.description}"
+        }
+        val plannerPrompt = """
+            Jesteś plannerem osobistego agenta AI.
 
-            tools.forEach { tool ->
-                appendLine("- ${tool.name}: ${tool.description}")
+            Twoim zadaniem jest stworzenie planu wykonania prośby użytkownika.
+
+            Nie wykonuj żadnych działań.
+            Nie odpowiadaj użytkownikowi.
+            Nie wywołuj narzędzi.
+
+            Dostępne narzędzia:
+            $toolsDescription
+
+            Zwróć wyłącznie poprawny JSON w następującym formacie:
+
+            {
+              "steps": [
+                {
+                  "id": "1",
+                  "description": "opis kroku"
+                }
+              ]
             }
 
-            appendLine()
-            appendLine("""
-        Nie wykonuj żadnych działań.
-        Nie używaj narzędzi.
-        Nie odpowiadaj bezpośrednio użytkownikowi.
-        Przygotuj tylko krótki plan krok po kroku.
-
-        Zasady:
-        - Uwzględnij zależności między krokami.
-        - Jeśli jeden krok wymaga wyniku wcześniejszego kroku, musi wystąpić później.
-        - Nie zgaduj danych, które powinny zostać pobrane za pomocą narzędzia.
-        - Nie podawaj konkretnych wartości, których jeszcze nie znasz.
-        - Plan powinien zawierać tylko kroki potrzebne do wykonania prośby.
-    """.trimIndent())
-        }
+            Zasady:
+            - Każdy krok powinien reprezentować jedno logiczne działanie.
+            - Kroki powinny być ułożone w kolejności wykonania.
+            - Jeżeli krok wymaga danych uzyskanych wcześniej, najpierw zaplanuj krok pobierający te dane.
+            - Nie zgaduj danych, które można pobrać za pomocą dostępnych narzędzi.
+            - Nie dodawaj żadnego tekstu przed ani po JSON.
+        """.trimIndent()
 
         val messages = listOf(
             systemMessage(plannerPrompt),
             userMessage(request)
         )
 
-        return when (
-            val response = llmClient.generate(messages)
-        ) {
+        val response = llmClient.generate(messages)
+        val text = when (response) {
             is Text -> response.content
-            is ToolCalls -> error("Planner should not call tools")
+            is ToolCalls ->
+                error("Planner should not call tools")
         }
+
+        return json.decodeFromString(text)
     }
 }

@@ -8,6 +8,7 @@ import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.llm.ToolCallValidator
+import com.patrykdolata.lifeagent.plan.Plan
 import com.patrykdolata.lifeagent.plan.Planner
 import com.patrykdolata.lifeagent.tool.Tool
 import com.patrykdolata.lifeagent.tool.ToolResult
@@ -42,13 +43,12 @@ class LifeAssistant(
         $message
 
         Plan wykonania:
-        $plan
+        ${plan.toPrompt()}
 
         Wykonaj ten plan krok po kroku.
         Korzystaj z narzędzi zgodnie z potrzebą.
         """.trimIndent()
         )
-//        messages += userMessage(message)
 
         repeat(maxSteps) {
             val response = llmClient.generate(messages, tools.map { it.definition })
@@ -144,3 +144,9 @@ private fun ToolResult.toMessageContent(): String =
         is Success -> content
         is Error -> "ERROR: $message"
     }
+
+private fun Plan.toPrompt(): String {
+    return steps.joinToString("\n") { step ->
+        "${step.id}. ${step.description}"
+    }
+}
