@@ -1,7 +1,9 @@
 package com.patrykdolata.lifeagent
 
 import com.patrykdolata.lifeagent.llm.LlmClient
-import com.patrykdolata.lifeagent.llm.LlmResponse
+import com.patrykdolata.lifeagent.llm.LlmResponse.Text
+import com.patrykdolata.lifeagent.llm.LlmResponse.ToolCalls
+import com.patrykdolata.lifeagent.llm.Message
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantToolCallMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
@@ -9,6 +11,8 @@ import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.userMessage
 import com.patrykdolata.lifeagent.llm.ToolCallValidator
 import com.patrykdolata.lifeagent.plan.Plan
+import com.patrykdolata.lifeagent.plan.PlanExecutor
+import com.patrykdolata.lifeagent.plan.PlanStep
 import com.patrykdolata.lifeagent.plan.Planner
 import com.patrykdolata.lifeagent.tool.Tool
 import com.patrykdolata.lifeagent.tool.ToolResult
@@ -19,6 +23,7 @@ import org.slf4j.LoggerFactory
 class LifeAssistant(
     private val llmClient: LlmClient,
     private val planner: Planner,
+    private val planExecutor: PlanExecutor,
     private val tools: List<Tool>,
     private val maxSteps: Int = 10
 ) {
@@ -37,30 +42,149 @@ class LifeAssistant(
 
         logger.info("Plan:\n{}", plan)
 
-        messages += userMessage(
-            """
-        Prośba użytkownika:
-        $message
-
-        Plan wykonania:
-        ${plan.toPrompt()}
-
-        Wykonaj ten plan krok po kroku.
-        Korzystaj z narzędzi zgodnie z potrzebą.
-        """.trimIndent()
+        return planExecutor.execute(
+            request = message,
+            plan = plan,
+            executeStep = ::executeStep
         )
+    }
+
+    private fun executeStep(originalRequest: String, step: PlanStep, previousResults: List<String>): String {
+        val request = buildStepRequest(originalRequest, step, previousResults)
+        logger.info("Executing plan step {}: {}", step.id, step.description)
+        val stepMessages = mutableListOf(
+            systemMessage(SYSTEM_PROMPT),
+            userMessage(request)
+        )
+        val stepTool = step.toolName?.let { toolName ->
+            tools.find { it.definition.name == toolName }
+                ?: error("Unknown tool in plan: $toolName")
+        }
+        return runStepAgentLoop(stepMessages, stepTool)
+    }
+
+    private fun runStepAgentLoop(messages: MutableList<Message>, stepTool: Tool?): String {
+        var toolExecuted = false
 
         repeat(maxSteps) {
-            val response = llmClient.generate(messages, tools.map { it.definition })
 
+            val availableTools = if (!toolExecuted && stepTool != null) {
+                listOf(stepTool.definition)
+            } else {
+                emptyList()
+            }
+
+            val response = llmClient.generate(messages, availableTools)
             when (response) {
-                is LlmResponse.Text -> {
+                is Text -> {
+                    if (stepTool != null && !toolExecuted) {
+                        logger.warn(
+                            "Model returned text before required tool '{}' was executed",
+                            stepTool.definition.name
+                        )
+
+                        messages += userMessage(
+                            """
+                            Nie wykonano jeszcze wymaganego narzędzia '${stepTool.definition.name}'.
+                            Nie zgaduj wyniku.
+                            Wywołaj teraz to narzędzie z argumentami zgodnymi z jego definicją.
+                            """.trimIndent()
+                        )
+
+                        return@repeat
+                    }
                     messages += assistantMessage(response.content)
                     return response.content
                 }
 
-                is LlmResponse.ToolCalls -> {
+                is ToolCalls -> {
+                    if (stepTool == null) {
+                        error(
+                            "Model attempted to call a tool, " +
+                                "but current plan step does not allow tools"
+                        )
+                    }
+
+                    if (toolExecuted) {
+                        error("Tool has already been executed for this plan step")
+                    }
+
+                    if (response.calls.size != 1) {
+                        error(
+                            "Expected exactly one tool call for plan step, " +
+                                "but got ${response.calls.size}"
+                        )
+                    }
+
+                    val toolCall = response.calls.single()
+                    if (toolCall.toolName != stepTool.definition.name) {
+                        error(
+                            "Plan step allows '${stepTool.definition.name}', " +
+                                "but model called '${toolCall.toolName}'"
+                        )
+                    }
+
                     messages += assistantToolCallMessage(response.calls)
+
+                    if (toolCall.parsingError != null) {
+                        messages += toolMessage(
+                            toolName = toolCall.toolName,
+                            content = "ERROR: ${toolCall.parsingError}"
+                        )
+
+                        return@repeat
+                    }
+
+                    val validationError = ToolCallValidator.validate(
+                        toolCall = toolCall,
+                        definition = stepTool.definition
+                    )
+
+                    if (validationError != null) {
+                        messages += toolMessage(
+                            toolName = toolCall.toolName,
+                            content = "ERROR: $validationError"
+                        )
+
+                        return@repeat
+                    }
+
+                    val result = try {
+                        stepTool.execute(toolCall.arguments)
+                    } catch (e: Exception) {
+                        Error("Tool execution failed: ${e.message}")
+                    }
+                    logger.info("Tool: {}, result: {}", toolCall.toolName, result)
+
+                    messages += toolMessage(
+                        toolName = toolCall.toolName,
+                        content = result.toMessageContent()
+                    )
+
+                    toolExecuted = true
+                }
+            }
+        }
+
+        error("Agent exceeded maximum number of steps: $maxSteps")
+    }
+
+    private fun runAgentLoop(): String {
+        repeat(maxSteps) {
+            val response = llmClient.generate(
+                messages,
+                tools.map { it.definition }
+            )
+
+            when (response) {
+                is Text -> {
+                    messages += assistantMessage(response.content)
+                    return response.content
+                }
+
+                is ToolCalls -> {
+                    messages += assistantToolCallMessage(response.calls)
+
                     response.calls.forEach { toolCall ->
                         val tool = tools.find {
                             it.definition.name == toolCall.toolName
@@ -115,6 +239,39 @@ class LifeAssistant(
         }
 
         error("Agent exceeded maximum number of steps: $maxSteps")
+    }
+
+    private fun buildStepRequest(
+        originalRequest: String,
+        step: PlanStep,
+        previousResults: List<String>
+    ): String {
+        val results = if (previousResults.isEmpty()) {
+            "Brak."
+        } else {
+            previousResults.joinToString("\n")
+        }
+
+        return """
+        Realizujesz jeden krok wcześniej przygotowanego planu.
+
+        Oryginalna prośba użytkownika jest podana wyłącznie jako kontekst:
+        $originalRequest
+
+        Aktualny krok:
+        ${step.id}. ${step.description}
+
+        Wyniki wcześniej wykonanych kroków:
+        $results
+
+        Wykonaj WYŁĄCZNIE aktualny krok.
+
+        Nie wykonuj żadnych działań należących do późniejszych kroków planu,
+        nawet jeśli wynikają z oryginalnej prośby użytkownika.
+
+        Jeśli do wykonania aktualnego kroku potrzebujesz narzędzia, użyj go.
+        Po wykonaniu aktualnego kroku zwróć jego wynik.
+    """.trimIndent()
     }
 
     companion object {

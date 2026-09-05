@@ -42,16 +42,27 @@ class LlmPlanner(
               "steps": [
                 {
                   "id": "1",
-                  "description": "opis kroku"
+                  "description": "opis kroku",
+                  "toolName": "nazwaNarzędzia"
                 }
               ]
             }
 
             Zasady:
             - Każdy krok powinien reprezentować jedno logiczne działanie.
-            - Kroki powinny być ułożone w kolejności wykonania.
-            - Jeżeli krok wymaga danych uzyskanych wcześniej, najpierw zaplanuj krok pobierający te dane.
-            - Nie zgaduj danych, które można pobrać za pomocą dostępnych narzędzi.
+            - Jeśli krok wymaga narzędzia, ustaw toolName dokładnie na nazwę jednego z dostępnych narzędzi.
+            - Jeden krok może używać maksymalnie jednego narzędzia.
+            - Jeśli krok nie wymaga narzędzia, ustaw toolName na null.
+            - Nie zgaduj danych, które można pobrać za pomocą narzędzi.
+            - Aktualna data i czas są stanem zewnętrznym i nigdy nie mogą być zgadywane.
+            - Jeśli prośba zawiera względne określenie czasu lub daty, takie jak:
+              "dzisiaj", "jutro", "wczoraj", "za tydzień", "w przyszłym tygodniu"
+              lub podobne, plan MUSI najpierw zawierać krok pobierający aktualną datę lub czas
+              za pomocą odpowiedniego narzędzia.
+            - Jeśli argument narzędzia w późniejszym kroku zależy od wyniku wcześniejszego kroku,
+              najpierw zaplanuj krok pobierający tę wartość.
+            - Nigdy nie twórz kroku createTask z datą względną typu "jutro".
+              Najpierw pobierz aktualną datę, a dopiero później utwórz zadanie z konkretną datą.
             - Nie dodawaj żadnego tekstu przed ani po JSON.
         """.trimIndent()
 
