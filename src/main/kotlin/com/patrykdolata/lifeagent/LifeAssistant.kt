@@ -4,7 +4,6 @@ import com.patrykdolata.lifeagent.llm.LlmClient
 import com.patrykdolata.lifeagent.llm.LlmResponse.Text
 import com.patrykdolata.lifeagent.llm.LlmResponse.ToolCalls
 import com.patrykdolata.lifeagent.llm.Message
-import com.patrykdolata.lifeagent.llm.Message.Companion.assistantMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.assistantToolCallMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.systemMessage
 import com.patrykdolata.lifeagent.llm.Message.Companion.toolMessage
@@ -51,16 +50,19 @@ class LifeAssistant(
     }
 
     private fun executeStep(originalRequest: String, step: PlanStep, previousResults: List<StepResult>): StepResult {
-        val request = buildStepRequest(originalRequest, step, previousResults)
         logger.info("Executing plan step {}: {}", step.id, step.description)
-        val stepMessages = mutableListOf(
-            systemMessage(SYSTEM_PROMPT),
-            userMessage(request)
-        )
         val stepTool = step.toolName?.let { toolName ->
             tools.find { it.definition.name == toolName }
                 ?: error("Unknown tool in plan: $toolName")
         }
+        if (stepTool != null && stepTool.definition.parameters.isEmpty()) {
+            return executeTool(step, stepTool)
+        }
+        val request = buildStepRequest(originalRequest, step, previousResults)
+        val stepMessages = mutableListOf(
+            systemMessage(SYSTEM_PROMPT),
+            userMessage(request)
+        )
         return runStepAgentLoop(stepMessages, step, stepTool)
     }
 
@@ -145,23 +147,28 @@ class LifeAssistant(
                         return@repeat
                     }
 
-                    val result = try {
-                        stepTool.execute(toolCall.arguments)
-                    } catch (e: Exception) {
-                        Error("Tool execution failed: ${e.message}")
-                    }
-                    logger.info("Tool: {}, result: {}", toolCall.toolName, result)
-
-                    return StepResult(
-                        stepId = step.id,
-                        toolName = toolCall.toolName,
-                        result = result.toMessageContent()
-                    )
+                    return executeTool(step, stepTool, toolCall.arguments);
                 }
             }
         }
 
         error("Agent exceeded maximum number of steps: $maxSteps")
+    }
+
+    private fun executeTool(step: PlanStep, tool: Tool, arguments: Map<String, String> = emptyMap()): StepResult {
+        val result = try {
+            tool.execute(arguments)
+        } catch (e: Exception) {
+            Error("Tool execution failed: ${e.message}")
+        }
+
+        logger.info("Tool: {}, result: {}", tool.definition.name, result)
+
+        return StepResult(
+            stepId = step.id,
+            toolName = tool.definition.name,
+            result = result.toMessageContent()
+        )
     }
 
     private fun buildStepRequest(
